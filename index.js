@@ -2,13 +2,52 @@ var request = require('request')
 var cheerio = require('cheerio')
 var fs = require('fs')
 var RSVP = require('rsvp')
+var config = require('./config')
+var cliArgs = require('command-line-args')
 
-var loadGallery = (uri) => {
+var BASE_DL_DIR = config.baseDownloadDir
+var BASE_SITE_URL = config.baseSiteUrl
+var options = cliArgs([
+  { name: 'galleries', alias: 'g', defaultOption: true }
+])
+
+
+// 'main' controller. Will loop through a list of
+// gallery names
+var loadGalleries = (baseUrl, galleryNames) => {
+  if(galleryNames.length == 0) return
+  galleryName = galleryNames.shift()
+  console.log(`Loading gallery ${galleryName}`)
+  loadGallery(baseUrl, galleryName).
+    then(($) => {
+      prepGalleryDir(galleryName).
+        then((galleryDir) => {
+          images = $("div.gallery").find("a.wp-img-bg-off").toArray()
+          console.log(`Found ${images.length} images`)
+          downloadImages(images, galleryDir).
+            then(() => {
+              console.log(`Gallery ${galleryName} completed`)
+              loadGalleries(baseUrl, galleryNames)
+            })
+        })
+    }).catch((e) => {
+      console.log(e)
+    })
+}
+
+// My only job is to load a gallery
+// And convert it into a $
+// Need to return a promise to whoever knows
+// what to do with the gallery
+var loadGallery = (baseUrl, galleryName) => {
+  uri = baseUrl + galleryName
+  console.log(`Connecting to ${uri}`)
   return new RSVP.Promise((resolve, reject) => {
     request(uri, (error, response, html) => {
       if(error) {
         reject(error)
       }else {
+        console.log(`Loaded gallery. Document length: ${html.length}`)
         var $ = cheerio.load(html)
         resolve($)
       }
@@ -16,11 +55,43 @@ var loadGallery = (uri) => {
   })
 }
 
-var downloadImages = (images, stopAt) => {
-  stopAt = stopAt || 0
-  if(images.length == stopAt) return
-  currentImage = images.shift()
-  downloadImage(currentImage.attribs['href']).then(() => downloadImages(images)).catch((err) => console.log(err))
+var normalizeGalleryName = (galleryName) => {
+  return galleryName.replace(/\//g, '_')
+}
+
+var prepGalleryDir = (galleryName) => {
+  return new RSVP.Promise((resolve, reject) => {
+    var dir = BASE_DL_DIR + '/' + normalizeGalleryName(galleryName)
+    console.log(`Prepping gallery dir ${dir}`)
+    if(!fs.existsSync(dir)){
+      fs.mkdir(dir, (err) => {
+        if(err) reject(err)
+        else resolve(dir)
+      })
+    }else {
+      resolve(dir)
+    }
+  })
+}
+
+// Given a list of image URLs and a target dir, this
+// will download the images into the target dir
+var downloadImages = (images, galleryDir) => {
+  return new RSVP.Promise((resolve, reject) => {
+    if(images.length == 0){
+      resolve()
+    }else {
+      currentImage = images.shift()
+      downloadImage(currentImage.attribs['href'], galleryDir).
+        then(() => {
+          downloadImages(images, galleryDir).then(resolve)
+        }).
+        catch((err) => {
+          console.log(err)
+          reject(err)
+        })
+    }
+  })
 }
 
 var generateFilename = (uri, headers) => {
@@ -46,7 +117,7 @@ var generateFilename = (uri, headers) => {
   }
 }
 
-var downloadImage = (uri, idx) => {
+var downloadImage = (uri, galleryDir) => {
   return new RSVP.Promise((resolve, reject) => {
     request.head(uri, (err, res, body) => {
       if(err){
@@ -54,8 +125,8 @@ var downloadImage = (uri, idx) => {
         reject(err)
       }else {
         filename = generateFilename(uri, res.headers)
-        filePath = '/Users/amielperez/modelx/' + filename
-        console.log("Downloading " + uri + " to " + filePath)
+        filePath = galleryDir + '/' + filename
+        console.log(`Downloading ${uri} to ${filePath}`)
         resolve()
         request(uri).pipe(fs.createWriteStream(filePath)).
           on('finish', resolve).
@@ -65,13 +136,7 @@ var downloadImage = (uri, idx) => {
   })
 }
 
-galleryUrl = 'http://www.modelx.org/japanese-av-idols/special-contents/yuria-satomi-4/'
-console.log `connecting to ${galleryUrl}`
-loadGallery(galleryUrl).
-  then(($) => {
-    images = $("div.gallery").find("a.wp-img-bg-off").toArray()
-    console.log("Found " + images.length + " images")
-    downloadImages(images, images.length - 2)
-  }).catch((err) => {
-    console.error(err)
-  })
+
+galleryNames = options['galleries'].split(',')
+console.log(`Galleries to process: ${galleryNames.length}`)
+loadGalleries(BASE_SITE_URL, galleryNames)

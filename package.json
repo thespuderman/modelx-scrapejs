@@ -1,11 +1,12 @@
 {
-  "name"         : "modelx-scrapejs",
-  "version"      : "0.0.1",
-  "description"  : "Scrape photos from modelx",
-  "main"         : "index.js",
-  "author"       : "Spuderman",
-  "dependencies" : {
-    "cheerio"    : "latest",
+  "name": "modelx-scrapejs",
+  "version": "0.0.1",
+  "description": "Scrape photos from modelx",
+  "main": "index.js",
+  "author": "Spuderman",
+  "dependencies": {
+    "cheerio": "latest",
+    "command-line-args": "^4.0.1",
     "request": "latest",
     "rsvp": "latest"
   }
