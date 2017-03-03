@@ -1,0 +1,12 @@
+{
+  "name"         : "modelx-scrapejs",
+  "version"      : "0.0.1",
+  "description"  : "Scrape photos from modelx",
+  "main"         : "index.js",
+  "author"       : "Spuderman",
+  "dependencies" : {
+    "cheerio"    : "latest",
+    "request": "latest",
+    "rsvp": "latest"
+  }
+}
